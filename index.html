@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Variables Hub (PVH) - Gestão Estratégica & Clientes</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Vue.js 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    [v-cloak] { display: none; }
+    .glass-header { background: rgba(30, 27, 24, 0.96); backdrop-filter: blur(8px); }
+  </style>
+</head>
+<body class="bg-amber-50/40 text-stone-800 font-sans min-h-screen">
+
+<div id="app" v-cloak class="min-h-screen flex flex-col">
+
+  <!-- ================= TELA DE LOGIN (PROTEGIDO) ================= -->
+  <div v-if="!user" class="flex-1 flex items-center justify-center p-4 bg-stone-900">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 space-y-6 border border-stone-800">
+      <div class="text-center space-y-2">
+        <div class="inline-block bg-gradient-to-br from-orange-500 to-amber-600 text-white p-3 rounded-2xl font-black text-2xl shadow-md">PVH</div>
+        <h2 class="text-xl font-bold text-stone-900">Project Variables Hub</h2>
+        <p class="text-xs text-stone-500">Faça login para acessar seus dados na nuvem</p>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-stone-700 mb-1">E-mail</label>
+          <input v-model="authForm.email" type="email" class="w-full border border-stone-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-orange-500" placeholder="seu-email@dominio.com" />
+        </div>
+        <div>
+          <label class="block font-semibold text-stone-700 mb-1">Senha</label>
+          <input v-model="authForm.password" type="password" class="w-full border border-stone-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••••••" />
+        </div>
+
+        <div v-if="authError" class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-center font-semibold">
+          {{ authError }}
+        </div>
+
+        <button @click="handleLogin" :disabled="loading" class="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 text-white font-bold p-3 rounded-lg transition shadow-md">
+          {{ loading ? 'Processando...' : 'Entrar no Sistema' }}
+        </button>
+      </div>
+      <div class="text-center text-[11px] text-stone-400">
+        Acesso restrito e protegido por autenticação Supabase.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SISTEMA PRINCIPAL (LOGADO) ================= -->
+  <div v-else class="flex-1 flex flex-col">
+
+    <!-- Header / Navigation -->
+    <header class="glass-header text-white sticky top-0 z-50 border-b border-orange-950/40 shadow-lg">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div class="flex items-center space-x-3 cursor-pointer" @click="currentTab = 'home'; currentView = 'list'; activeProject = null">
+          <div class="bg-gradient-to-br from-orange-500 to-amber-600 text-white p-2 rounded-xl font-black text-xl shadow-md">PVH</div>
+          <div>
+            <h1 class="font-bold text-lg leading-tight text-stone-100">Project Variables Hub</h1>
+            <p class="text-xs text-orange-300">Gestão Estratégica & Clientes</p>
+          </div>
+        </div>
+        
+        <!-- Nav Tabs -->
+        <nav class="flex space-x-2 items-center">
+          <button 
+            @click="currentTab = 'home'; currentView = 'list'" 
+            :class="currentTab === 'home' && currentView === 'list' ? 'bg-orange-500 text-white font-semibold' : 'text-stone-300 hover:bg-stone-800'"
+            class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-2">
+            <i class="fa-solid fa-house"></i>
+            <span>Início</span>
+          </button>
+
+          <button 
+            @click="currentTab = 'projects'; currentView = 'list'" 
+            :class="currentTab === 'projects' && currentView === 'list' ? 'bg-orange-500 text-white font-semibold' : 'text-stone-300 hover:bg-stone-800'"
+            class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-2">
+            <i class="fa-solid fa-diagram-project"></i>
+            <span>Projetos ({{ projects.length }})</span>
+          </button>
+
+          <button 
+            @click="currentTab = 'clients'; currentView = 'list'" 
+            :class="currentTab === 'clients' && currentView === 'list' ? 'bg-orange-500 text-white font-semibold' : 'text-stone-300 hover:bg-stone-800'"
+            class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-2">
+            <i class="fa-solid fa-users"></i>
+            <span>Clientes ({{ clients.length }})</span>
+          </button>
+
+          <div class="w-px h-6 bg-stone-700 mx-2"></div>
+
+          <button 
+            @click="currentTab = 'variables'; currentView = 'list'" 
+            :class="currentTab === 'variables' ? 'bg-stone-700 text-white font-semibold' : 'text-stone-300 hover:bg-stone-800'"
+            class="px-3 py-2 rounded-lg text-xs font-medium transition flex items-center space-x-1">
+            <i class="fa-solid fa-sliders"></i>
+            <span>Variáveis</span>
+          </button>
+
+          <button 
+            @click="currentTab = 'logs'; currentView = 'list'" 
+            :class="currentTab === 'logs' ? 'bg-stone-700 text-white font-semibold' : 'text-stone-300 hover:bg-stone-800'"
+            class="px-3 py-2 rounded-lg text-xs font-medium transition flex items-center space-x-1">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>Histórico</span>
+          </button>
+
+          <div class="w-px h-6 bg-stone-700 mx-2"></div>
+
+          <button @click="logout" class="bg-red-600/80 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1">
+            <i class="fa-solid fa-right-from-bracket"></i><span>Sair</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <!-- ================= ABA: HOME (COM GRÁFICOS DE PIZZA) ================= -->
+      <div v-if="currentTab === 'home' && currentView === 'list'" class="space-y-8">
+        
+        <div class="bg-white p-5 rounded-2xl shadow-xs border border-orange-200/80 flex justify-between items-center">
+          <div>
+            <h2 class="text-xl font-bold text-stone-900">Dashboard Executivo & Visão Geral</h2>
+            <p class="text-xs text-stone-500">Acompanhamento gráfico e listagem rápida do status de clientes e projetos</p>
+          </div>
+          <div class="flex space-x-2">
+            <button @click="currentTab = 'projects'" class="bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs px-3 py-2 rounded-lg transition">Gerenciar Projetos</button>
+            <button @click="currentTab = 'clients'" class="bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs px-3 py-2 rounded-lg transition">Gerenciar Clientes</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          <!-- Bloco Clientes -->
+          <div class="bg-white rounded-2xl border border-orange-200/80 shadow-xs p-6 flex flex-col justify-between">
+            <div>
+              <h3 class="font-bold text-stone-900 mb-2 flex items-center"><i class="fa-solid fa-users text-orange-500 mr-2"></i>Status de Clientes & Suporte</h3>
+              <p class="text-xs text-stone-500 mb-4">Proporção atual do status de atendimento da base</p>
+              <!-- Gráfico de Pizza -->
+              <div class="w-full h-56 flex justify-center items-center mb-6 relative">
+                <canvas id="clientsPieChart"></canvas>
+              </div>
+            </div>
+            <!-- Tabela de Clientes -->
+            <div class="overflow-x-auto border border-stone-200 rounded-xl">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-stone-50 text-stone-500 uppercase text-[10px] border-b">
+                  <tr><th class="p-2.5">Cliente</th><th class="p-2.5 text-center">Projetos</th><th class="p-2.5">Status</th></tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr v-for="c in clients" :key="c.id" class="hover:bg-amber-50/40">
+                    <td class="p-2.5 font-bold text-stone-900">{{ c.name }}</td>
+                    <td class="p-2.5 text-center font-semibold text-stone-600">{{ c.purchasedProjects.length }}</td>
+                    <td class="p-2.5">
+                      <span v-if="clientHasMaintenance(c)" class="px-2 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-800 border border-red-200">Manutenção</span>
+                      <span v-else-if="c.purchasedProjects.length > 0" class="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Ativo</span>
+                      <span v-else class="px-2 py-0.5 rounded text-[9px] font-bold bg-stone-100 text-stone-600 border border-stone-200">Inativo</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bloco Projetos -->
+          <div class="bg-white rounded-2xl border border-orange-200/80 shadow-xs p-6 flex flex-col justify-between">
+            <div>
+              <h3 class="font-bold text-stone-900 mb-2 flex items-center"><i class="fa-solid fa-diagram-project text-orange-500 mr-2"></i>Status dos Projetos</h3>
+              <p class="text-xs text-stone-500 mb-4">Distribuição do andamento geral das iniciativas</p>
+              <!-- Gráfico de Pizza -->
+              <div class="w-full h-56 flex justify-center items-center mb-6 relative">
+                <canvas id="projectsPieChart"></canvas>
+              </div>
+            </div>
+            <!-- Tabela de Projetos -->
+            <div class="overflow-x-auto border border-stone-200 rounded-xl">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-stone-50 text-stone-500 uppercase text-[10px] border-b">
+                  <tr><th class="p-2.5">Projeto</th><th class="p-2.5">Fase</th><th class="p-2.5">Status</th></tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr v-for="p in projects" :key="p.id" class="hover:bg-amber-50/40 cursor-pointer" @click="viewProjectDetail(p)">
+                    <td class="p-2.5 font-bold text-stone-900 hover:text-orange-600">{{ p.name }}</td>
+                    <td class="p-2.5"><span :class="getStageBadgeClass(p.stage)" class="px-2 py-0.5 rounded text-[9px] font-bold">{{ p.stage }}</span></td>
+                    <td class="p-2.5"><span :class="getProjectStatusBadgeClass(p.status)" class="px-2 py-0.5 rounded text-[9px] font-bold border">{{ p.status }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ================= ABA: CLIENTES ================= -->
+      <div v-if="currentTab === 'clients' && currentView === 'list'" class="space-y-6">
+        <div class="flex justify-between items-center bg-white p-5 rounded-2xl shadow-xs border border-orange-200/80">
+          <div>
+            <h2 class="text-xl font-bold text-stone-900">Gestão de Clientes</h2>
+            <p class="text-xs text-stone-500">Cadastre clientes, dados essenciais e projetos vinculados</p>
+          </div>
+          <button @click="openClientModal()" class="bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-md hover:from-orange-600 transition flex items-center space-x-2">
+            <i class="fa-solid fa-user-plus"></i><span>Novo Cliente</span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div v-for="client in clients" :key="client.id" class="bg-white rounded-2xl border border-orange-200/70 shadow-xs flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-stone-100 bg-stone-50/50">
+              <div class="flex justify-between items-start">
+                <div>
+                  <h3 class="text-lg font-bold text-stone-900 mb-0.5">{{ client.name }}</h3>
+                  <p class="text-xs text-stone-500"><i class="fa-solid fa-envelope w-3"></i> {{ client.email }}</p>
+                  <p class="text-xs text-stone-500 mt-0.5"><i class="fa-solid fa-phone w-3"></i> {{ client.phone }}</p>
+                </div>
+                <button @click="openClientModal(client)" class="text-stone-400 hover:text-orange-600 p-1"><i class="fa-solid fa-pen"></i></button>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <span v-for="(field, index) in client.customFields" :key="index" class="text-[10px] bg-white border border-stone-200 text-stone-600 px-2 py-1 rounded font-semibold">
+                  {{ field.key }}: <span class="text-stone-900">{{ field.value }}</span>
+                </span>
+              </div>
+            </div>
+            <div class="p-5 flex-1 space-y-2">
+              <h4 class="text-[10px] font-bold uppercase text-stone-500 border-b pb-1">Projetos Adquiridos ({{ client.purchasedProjects.length }})</h4>
+              <div v-for="purchased in client.purchasedProjects" :key="purchased.projectId" class="bg-white border border-stone-200 rounded-lg p-2 flex items-center justify-between">
+                <span class="text-xs font-bold text-stone-800">{{ getProjectName(purchased.projectId) }}</span>
+                <span v-if="purchased.maintenanceRequired" class="text-[9px] font-bold uppercase bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200">Manutenção</span>
+                <span v-else class="text-[9px] font-bold uppercase bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">Normal</span>
+              </div>
+            </div>
+            <div class="p-3 bg-stone-50 border-t flex justify-end">
+              <button @click="deleteClient(client.id)" class="text-[11px] font-bold text-red-500 hover:text-red-700 flex items-center space-x-1"><i class="fa-solid fa-trash-can"></i><span>Remover</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ================= ABA: PROJETOS ================= -->
+      <div v-if="currentTab === 'projects' && currentView === 'list'" class="space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-xs border border-orange-200/80">
+          <div>
+            <h2 class="text-xl font-bold text-stone-900">Visão Geral dos Projetos</h2>
+            <p class="text-xs text-stone-500">Gerencie trade-offs, métricas e parâmetros de cada iniciativa</p>
+          </div>
+          <div class="flex items-center space-x-3 w-full sm:w-auto">
+            <select v-model="filterStage" class="border border-stone-300 rounded-lg text-xs px-3 py-2 bg-stone-50 outline-none">
+              <option value="ALL">Todas as Fases</option>
+              <option value="IDEATION">Ideação</option>
+              <option value="MVP">MVP</option>
+              <option value="TRACTION">Tração</option>
+              <option value="SCALE">Escala</option>
+            </select>
+            <button @click="openProjectModal()" class="bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-md hover:from-orange-600 transition flex items-center space-x-2">
+              <i class="fa-solid fa-plus"></i><span>Novo Projeto</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div v-for="project in filteredProjects" :key="project.id" class="bg-white rounded-2xl border border-orange-200/70 shadow-xs hover:shadow-md transition flex flex-col justify-between overflow-hidden">
+            <div class="p-5 border-b border-stone-100">
+              <div class="flex justify-between items-start mb-2">
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide" :class="getStageBadgeClass(project.stage)">{{ project.stage }}</span>
+                <span class="text-[11px] font-bold px-2.5 py-1 rounded-full border" :class="getProjectStatusBadgeClass(project.status)">{{ project.status }}</span>
+              </div>
+              <h3 @click="viewProjectDetail(project)" class="text-lg font-bold text-stone-900 mb-1 hover:text-orange-600 cursor-pointer transition">{{ project.name }}</h3>
+              <p class="text-xs text-stone-600 line-clamp-2 mb-3">{{ project.description }}</p>
+            </div>
+            <div class="p-3.5 bg-stone-50 border-t border-stone-100 flex justify-between items-center">
+              <button @click="viewProjectDetail(project)" class="text-xs font-bold text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-eye"></i><span>Acessar Projeto</span>
+              </button>
+              <button @click="deleteProject(project.id)" class="text-xs font-semibold text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ================= VISUALIZAÇÃO DETALHADA DO PROJETO ================= -->
+      <div v-if="currentView === 'detail' && activeProject" class="space-y-6">
+        <div class="flex items-center justify-between">
+          <button @click="closeProjectDetail()" class="text-xs font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 px-3 py-2 rounded-lg transition flex items-center space-x-2">
+            <i class="fa-solid fa-arrow-left"></i><span>Voltar para Lista</span>
+          </button>
+          <div class="flex items-center space-x-2">
+            <button @click="openProjectModal(activeProject)" class="text-xs font-semibold bg-stone-100 hover:bg-stone-200 text-stone-700 px-3 py-2 rounded-lg border border-stone-300">Editar Configurações</button>
+            <button @click="openLinkVariableModal(activeProject)" class="text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg shadow-xs"><i class="fa-solid fa-plus mr-1"></i>Adicionar Variável</button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 border border-orange-200/80 shadow-sm space-y-4">
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-stone-100 pb-4">
+            <div>
+              <div class="flex items-center space-x-2 mb-2">
+                <span class="px-3 py-1 rounded-full text-xs font-bold" :class="getStageBadgeClass(activeProject.stage)">{{ activeProject.stage }}</span>
+                <span class="text-xs font-semibold uppercase bg-stone-100 px-2.5 py-1 rounded-full border" :class="getProjectStatusBadgeClass(activeProject.status)">Status: {{ activeProject.status }}</span>
+              </div>
+              <h2 class="text-2xl font-black text-stone-900">{{ activeProject.name }}</h2>
+              <p class="text-sm text-stone-600 mt-1 max-w-3xl">{{ activeProject.description }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-orange-200/85 shadow-sm p-6 space-y-4">
+          <h3 class="text-lg font-bold text-stone-900 flex items-center space-x-2"><i class="fa-solid fa-sliders text-orange-600"></i><span>Painel de Variáveis do Projeto</span></h3>
+          <div v-if="activeProject.variables.length === 0" class="text-center py-10 bg-stone-50 rounded-xl border border-dashed border-stone-300">
+            <p class="text-sm text-stone-500">Nenhuma variável associada a este projeto.</p>
+          </div>
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div v-for="pv in activeProject.variables" :key="pv.id" class="p-4 rounded-xl border border-stone-200 bg-stone-50/50 space-y-3">
+              <div class="flex justify-between items-start">
+                <div>
+                  <h4 class="font-bold text-stone-900 text-sm">{{ getGlobalVariable(pv.variableId)?.name }}</h4>
+                  <p class="text-xs text-stone-500 mt-0.5">{{ getGlobalVariable(pv.variableId)?.description }}</p>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase" :class="getVariableCategoryBadge(getGlobalVariable(pv.variableId)?.category)">
+                  {{ getGlobalVariable(pv.variableId)?.category }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-stone-200/60">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xs font-semibold text-stone-600">Valor Atual:</span>
+                  <input v-model="pv.currentValue" type="text" class="w-28 text-xs font-mono font-bold px-2.5 py-1.5 border border-stone-300 rounded-lg bg-white outline-none" />
+                  <button @click="updateVariableValue(activeProject, pv)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">Salvar</button>
+                </div>
+                <button @click="removeVariableFromProject(activeProject, pv.id)" class="text-stone-400 hover:text-red-600 text-xs"><i class="fa-solid fa-trash-can"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ================= ABA: CATÁLOGO DE VARIÁVEIS ================= -->
+      <div v-if="currentTab === 'variables' && currentView === 'list'" class="space-y-6">
+        <div class="flex justify-between items-center bg-white p-5 rounded-2xl shadow-xs border border-orange-200/80">
+          <div>
+            <h2 class="text-xl font-bold text-stone-900">Catálogo Global de Variáveis</h2>
+            <p class="text-xs text-stone-500">Parâmetros de projetos e campos essenciais de <strong class="text-blue-700">Dados do Cliente</strong> (como CNPJ/CPF, e-mail, telefone)</p>
+          </div>
+          <button @click="openVariableModal()" class="bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-md hover:from-orange-600 transition flex items-center space-x-2">
+            <i class="fa-solid fa-plus"></i><span>Nova Variável</span>
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-orange-200/80 shadow-xs overflow-hidden">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="bg-stone-900 text-stone-200 font-semibold uppercase text-[10px] tracking-wider">
+                <th class="p-3.5">Nome da Variável / Campo</th>
+                <th class="p-3.5">Categoria</th>
+                <th class="p-3.5">Tipo de Dado</th>
+                <th class="p-3.5">Descrição</th>
+                <th class="p-3.5 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-stone-100">
+              <tr v-for="variable in globalVariables" :key="variable.id" class="hover:bg-amber-50/30">
+                <td class="p-3.5 font-bold text-stone-900">{{ variable.name }}</td>
+                <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase" :class="getVariableCategoryBadge(variable.category)">{{ variable.category }}</span></td>
+                <td class="p-3.5"><span class="font-mono bg-stone-100 text-stone-700 px-2 py-0.5 rounded text-[10px]">{{ variable.type }}</span></td>
+                <td class="p-3.5 text-stone-600">{{ variable.description }}</td>
+                <td class="p-3.5 text-right space-x-2">
+                  <button @click="openVariableModal(variable)" class="text-orange-600 hover:text-orange-800 p-1"><i class="fa-solid fa-pen"></i></button>
+                  <button @click="deleteGlobalVariable(variable.id)" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+      <!-- ================= ABA: HISTÓRICO ================= -->
+      <div v-if="currentTab === 'logs' && currentView === 'list'" class="space-y-6">
+        <div class="flex justify-between items-center bg-white p-5 rounded-2xl shadow-xs border border-orange-200/80">
+          <div>
+            <h2 class="text-xl font-bold text-stone-900">Audit Log & Histórico</h2>
+            <p class="text-xs text-stone-500">Rastreamento completo das edições realizadas no sistema</p>
+          </div>
+          <button @click="clearAuditLog()" :disabled="logs.length === 0" :class="logs.length === 0 ? 'bg-stone-200 text-stone-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white shadow-md'" class="text-xs font-bold px-4 py-2.5 rounded-lg transition">Limpar Histórico</button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-orange-200/80 shadow-xs overflow-hidden">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="bg-stone-900 text-stone-200 font-semibold uppercase text-[10px] tracking-wider">
+                <th class="p-3.5">Data / Hora</th>
+                <th class="p-3.5">Projeto</th>
+                <th class="p-3.5">Variável Modificada</th>
+                <th class="p-3.5">Novo Valor</th>
+                <th class="p-3.5">Justificativa</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-stone-100">
+              <tr v-for="log in logs" :key="log.id" class="hover:bg-amber-50/30">
+                <td class="p-3.5 text-stone-500 font-mono whitespace-nowrap">{{ log.timestamp }}</td>
+                <td class="p-3.5 font-bold text-stone-900">{{ log.projectName }}</td>
+                <td class="p-3.5 text-orange-700 font-semibold">{{ log.variableName }}</td>
+                <td class="p-3.5"><span class="bg-emerald-50 text-emerald-800 font-mono px-2 py-1 rounded font-bold">{{ log.newValue }}</span></td>
+                <td class="p-3.5 text-stone-600 italic">{{ log.justification }}</td>
+              </tr>
+              <tr v-if="logs.length === 0"><td colspan="5" class="p-8 text-center text-stone-400">Nenhum registro no histórico.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+
+  <!-- ================= MODAIS (CLIENTE, PROJETO, VARIÁVEL, LINK) ================= -->
+
+  <!-- Modal Cliente -->
+  <div v-if="showClientModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+      <h3 class="text-xl font-bold text-stone-900 mb-4 pb-2 border-b">{{ editingClient ? 'Editar Cliente' : 'Novo Cliente' }}</h3>
+      <div class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-stone-700 mb-1">Nome / Empresa</label>
+            <input v-model="clientForm.name" type="text" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none" placeholder="Ex: Tech Solutions" />
+          </div>
+          <div>
+            <label class="block font-semibold text-stone-700 mb-1">E-mail</label>
+            <input v-model="clientForm.email" type="email" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none" placeholder="contato@empresa.com" />
+          </div>
+          <div>
+            <label class="block font-semibold text-stone-700 mb-1">Telefone</label>
+            <input v-model="clientForm.phone" type="text" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none" placeholder="(11) 98765-4321" />
+          </div>
+        </div>
+
+        <div class="bg-stone-50 p-4 rounded-xl border">
+          <div class="flex justify-between items-center mb-2">
+            <h4 class="font-bold text-stone-800 text-sm">Dados Adicionais do Cliente (CNPJ/CPF, etc.)</h4>
+            <button @click="addCustomField()" class="text-orange-600 font-bold text-[11px] bg-orange-100 px-2 py-1 rounded">+ Adicionar Campo</button>
+          </div>
+          <div v-for="(field, index) in clientForm.customFields" :key="index" class="flex items-center space-x-2 mb-2">
+            <input v-model="field.key" list="client-variables-list" type="text" placeholder="Nome do Campo (ex: CNPJ / CPF)" class="w-1/3 border border-stone-300 rounded p-2 outline-none" />
+            <datalist id="client-variables-list">
+              <option v-for="v in globalVariables.filter(v => v.category === 'CLIENTE')" :value="v.name"></option>
+            </datalist>
+            <input v-model="field.value" type="text" placeholder="Valor do dado" class="flex-1 border border-stone-300 rounded p-2 outline-none" />
+            <button @click="removeCustomField(index)" class="text-red-500 p-2"><i class="fa-solid fa-trash-can"></i></button>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-stone-800 text-sm mb-2">Projetos Vinculados</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div v-for="proj in projects" :key="proj.id" class="border p-2.5 rounded-lg bg-white">
+              <label class="flex items-center space-x-2 font-bold text-stone-800 cursor-pointer">
+                <input type="checkbox" :checked="isProjectPurchased(proj.id)" @change="toggleProjectPurchase(proj.id)" class="rounded text-orange-600">
+                <span>{{ proj.name }}</span>
+              </label>
+              <div v-if="isProjectPurchased(proj.id)" class="mt-2 ml-5">
+                <label class="flex items-center space-x-1 text-[10px] text-stone-600 cursor-pointer font-semibold">
+                  <input type="checkbox" :checked="isMaintenanceRequired(proj.id)" @change="toggleMaintenance(proj.id)" class="rounded text-orange-600">
+                  <span :class="isMaintenanceRequired(proj.id) ? 'text-red-600 font-bold' : ''">Manutenção Ativa</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-4 mt-4 border-t">
+        <button @click="showClientModal = false" class="px-4 py-2 text-xs font-semibold text-stone-600">Cancelar</button>
+        <button @click="saveClient()" class="px-4 py-2 text-xs font-bold bg-orange-600 text-white rounded-lg">Salvar Cliente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Projeto -->
+  <div v-if="showProjectModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl shadow-xl border max-w-lg w-full p-6 space-y-3 text-xs">
+      <h3 class="text-lg font-bold text-stone-900">{{ editingProject ? 'Editar Projeto' : 'Novo Projeto' }}</h3>
+      <div>
+        <label class="block font-semibold text-stone-700 mb-1">Nome</label>
+        <input v-model="projectForm.name" type="text" class="w-full border rounded-lg p-2.5 outline-none" />
+      </div>
+      <div>
+        <label class="block font-semibold text-stone-700 mb-1">Descrição</label>
+        <textarea v-model="projectForm.description" class="w-full border rounded-lg p-2.5 outline-none h-16"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block font-semibold text-stone-700 mb-1">Fase</label>
+          <select v-model="projectForm.stage" class="w-full border rounded-lg p-2.5 outline-none">
+            <option value="IDEATION">Ideação</option>
+            <option value="MVP">MVP</option>
+            <option value="TRACTION">Tração</option>
+            <option value="SCALE">Escala</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-stone-700 mb-1">Status</label>
+          <select v-model="projectForm.status" class="w-full border rounded-lg p-2.5 outline-none">
+            <option value="Planejamento">Planejamento</option>
+            <option value="Em Andamento">Em Andamento</option>
+            <option value="Concluído">Concluído</option>
+            <option value="Pausado">Pausado</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t mt-4">
+        <button @click="showProjectModal = false" class="px-4 py-2 text-stone-600">Cancelar</button>
+        <button @click="saveProject()" class="px-4 py-2 bg-orange-600 text-white font-bold rounded-lg">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Variável Global -->
+  <div v-if="showVariableModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl shadow-xl border max-w-lg w-full p-6 space-y-3 text-xs">
+      <h3 class="text-lg font-bold text-stone-900">{{ editingVariable ? 'Editar Variável' : 'Nova Variável' }}</h3>
+      <div>
+        <label class="block font-semibold text-stone-700 mb-1">Nome</label>
+        <input v-model="variableForm.name" type="text" class="w-full border rounded-lg p-2.5 outline-none" placeholder="Ex: CNPJ / CPF" />
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block font-semibold text-stone-700 mb-1">Categoria</label>
+          <select v-model="variableForm.category" class="w-full border rounded-lg p-2.5 outline-none">
+            <option value="TECNICA">Técnica</option>
+            <option value="FINANCEIRA">Financeira</option>
+            <option value="TEMPORAL">Temporal</option>
+            <option value="CLIENTE">Dados do Cliente</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-stone-700 mb-1">Tipo</label>
+          <select v-model="variableForm.type" class="w-full border rounded-lg p-2.5 outline-none">
+            <option value="TEXT">Texto</option>
+            <option value="NUMBER">Número</option>
+            <option value="CURRENCY">Moeda</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block font-semibold text-stone-700 mb-1">Descrição</label>
+        <textarea v-model="variableForm.description" class="w-full border rounded-lg p-2.5 outline-none h-16"></textarea>
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t mt-4">
+        <button @click="showVariableModal = false" class="px-4 py-2 text-stone-600">Cancelar</button>
+        <button @click="saveGlobalVariable()" class="px-4 py-2 bg-orange-600 text-white font-bold rounded-lg">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Vincular Variável -->
+  <div v-if="showLinkModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl shadow-xl border max-w-md w-full p-6 space-y-3 text-xs">
+      <h3 class="text-lg font-bold text-stone-900">Vincular Variável em {{ targetProject?.name }}</h3>
+      <div>
+        <label class="block font-semibold text-stone-700 mb-1">Selecione</label>
+        <select v-model="linkForm.variableId" class="w-full border rounded-lg p-2.5 outline-none">
+          <option v-for="v in availableVariablesForProject" :key="v.id" :value="v.id">{{ v.name }} ({{ v.category }})</option>
+        </select>
+      </div>
+      <div>
+        <label class="block font-semibold text-stone-700 mb-1">Valor Inicial</label>
+        <input v-model="linkForm.currentValue" type="text" class="w-full border rounded-lg p-2.5 outline-none" />
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t">
+        <button @click="showLinkModal = false" class="px-4 py-2 text-stone-600">Cancelar</button>
+        <button @click="linkVariableToProject()" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg">Vincular</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// CONFIGURAÇÃO DO SUPABASE (Já preenchida com suas chaves)
+const SUPABASE_URL = 'https://ybmyabvawidwhtieocox.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlibXlhYnZhd2lkd2h0aWVvY294Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NDQ1MzMsImV4cCI6MjEwMjIyMDUzM30.DVVrn_ia0P0ag_GL0OrKQ-V8RCO-rkpNAyVPNJ0Z9Mg';
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      user: null,
+      loading: false,
+      authError: null,
+      authForm: { email: '', password: '' },
+
+      currentTab: 'home',
+      currentView: 'list',
+      activeProject: null,
+      filterStage: 'ALL',
+      
+      showClientModal: false, editingClient: null,
+      clientForm: { name: '', email: '', phone: '', customFields: [], purchasedProjects: [] },
+
+      showProjectModal: false, editingProject: null,
+      projectForm: { name: '', description: '', stage: 'MVP', status: 'Em Andamento', budget: 45000 },
+
+      showVariableModal: false, editingVariable: null,
+      variableForm: { name: '', category: 'CLIENTE', type: 'TEXT', description: '' },
+
+      showLinkModal: false, targetProject: null, linkForm: { variableId: '', currentValue: '' },
+
+      clientsPieInstance: null,
+      projectsPieInstance: null,
+
+      logs: [
+        { id: 'l1', timestamp: '2026-08-13 14:00', projectName: 'Plataforma SaaS', variableName: 'Dívida Técnica', newValue: '28', justification: 'Atualização inicial' }
+      ],
+
+      globalVariables: [
+        { id: 'v1', name: 'Dívida Técnica (Horas)', category: 'TECNICA', type: 'NUMBER', description: 'Refatoração acumulada' },
+        { id: 'v2', name: 'Custo Mensal (R$)', category: 'FINANCEIRA', type: 'CURRENCY', description: 'Servidores cloud' },
+        { id: 'v5', name: 'CNPJ / CPF', category: 'CLIENTE', type: 'TEXT', description: 'Documento fiscal' },
+        { id: 'v6', name: 'E-mail de Faturamento', category: 'CLIENTE', type: 'TEXT', description: 'Envio de boletos' }
+      ],
+
+      projects: [
+        { id: 'p1', name: 'Plataforma SaaS de Analytics', description: 'Dashboard de inteligência.', stage: 'MVP', status: 'Em Andamento', budget: 50000, variables: [{ id: 'pv1', variableId: 'v1', currentValue: '28' }] },
+        { id: 'p2', name: 'App Mobile Logística', description: 'Rastreamento de entregas.', stage: 'TRACTION', status: 'Concluído', budget: 35000, variables: [] }
+      ],
+
+      clients: [
+        { id: 'c1', name: 'Tech Solutions Ltda', email: 'contato@techsol.com.br', phone: '(11) 98765-4321', customFields: [{ key: 'CNPJ / CPF', value: '12.345.678/0001-90' }], purchasedProjects: [{ projectId: 'p1', maintenanceRequired: true }] },
+        { id: 'c2', name: 'Logística Rápida S.A.', email: 'suporte@lograpida.com', phone: '(21) 91111-2222', customFields: [], purchasedProjects: [{ projectId: 'p2', maintenanceRequired: false }] }
+      ]
+    }
+  },
+
+  async mounted() {
+    // Verificar sessão existente ao carregar a página
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session) {
+      this.user = session.user;
+    }
+
+    // Ouvir mudanças de estado (login/logout) em tempo real
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      this.user = session ? session.user : null;
+    });
+
+    if (this.currentTab === 'home') {
+      this.renderCharts();
+    }
+  },
+
+  computed: {
+    filteredProjects() {
+      if (this.filterStage === 'ALL') return this.projects;
+      return this.projects.filter(p => p.stage === this.filterStage);
+    },
+    availableVariablesForProject() {
+      if (!this.targetProject) return [];
+      const assigned = this.targetProject.variables.map(v => v.variableId);
+      return this.globalVariables.filter(v => !assigned.includes(v.id) && v.category !== 'CLIENTE');
+    }
+  },
+
+  watch: {
+    currentTab(newVal) {
+      if (newVal === 'home') {
+        this.$nextTick(() => this.renderCharts());
+      }
+    }
+  },
+
+  methods: {
+    async handleLogin() {
+      this.loading = true;
+      this.authError = null;
+      const { error } = await supabaseClient.auth.signInWithPassword({
+        email: this.authForm.email,
+        password: this.authForm.password
+      });
+
+      if (error) {
+        this.authError = "Erro ao entrar: " + error.message;
+      }
+      this.loading = false;
+    },
+
+    async logout() {
+      await supabaseClient.auth.signOut();
+    },
+
+    clientHasMaintenance(c) { return c.purchasedProjects.some(p => p.maintenanceRequired); },
+    getProjectName(id) { const p = this.projects.find(proj => proj.id === id); return p ? p.name : 'Desconhecido'; },
+    getGlobalVariable(id) { return this.globalVariables.find(v => v.id === id); },
+
+    getVariableCategoryBadge(cat) {
+      if (cat === 'TECNICA') return 'bg-orange-100 text-orange-800';
+      if (cat === 'FINANCEIRA') return 'bg-emerald-100 text-emerald-800';
+      if (cat === 'CLIENTE') return 'bg-blue-100 text-blue-800 border border-blue-200';
+      return 'bg-amber-100 text-amber-800';
+    },
+    getStageBadgeClass(stage) {
+      if (stage === 'MVP') return 'bg-orange-100 text-orange-900 border border-orange-200';
+      if (stage === 'TRACTION') return 'bg-emerald-100 text-emerald-900 border border-emerald-200';
+      return 'bg-stone-100 text-stone-800';
+    },
+    getProjectStatusBadgeClass(status) {
+      if (status === 'Em Andamento') return 'bg-blue-100 text-blue-800 border-blue-200';
+      if (status === 'Concluído') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      if (status === 'Pausado') return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-stone-100 text-stone-800 border-stone-200';
+    },
+
+    renderCharts() {
+      if (this.clientsPieInstance) this.clientsPieInstance.destroy();
+      if (this.projectsPieInstance) this.projectsPieInstance.destroy();
+
+      const manCount = this.clients.filter(c => this.clientHasMaintenance(c)).length;
+      const actCount = this.clients.filter(c => !this.clientHasMaintenance(c) && c.purchasedProjects.length > 0).length;
+      const inactCount = this.clients.filter(c => c.purchasedProjects.length === 0).length;
+
+      const clientsCtx = document.getElementById('clientsPieChart');
+      if (clientsCtx) {
+        this.clientsPieInstance = new Chart(clientsCtx, {
+          type: 'pie',
+          data: {
+            labels: ['Manutenção', 'Ativo', 'Inativo'],
+            datasets: [{ data: [manCount, actCount, inactCount], backgroundColor: ['#ef4444', '#10b981', '#a8a29e'] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+
+      const statusMap = this.projects.reduce((acc, p) => { acc[p.status] = (acc[p.status] || 0) + 1; return acc; }, {});
+      const projectsCtx = document.getElementById('projectsPieChart');
+      if (projectsCtx) {
+        this.projectsPieInstance = new Chart(projectsCtx, {
+          type: 'pie',
+          data: {
+            labels: Object.keys(statusMap),
+            datasets: [{ data: Object.values(statusMap), backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+    },
+
+    viewProjectDetail(p) { this.activeProject = p; this.currentView = 'detail'; },
+    closeProjectDetail() { this.currentView = 'list'; this.activeProject = null; },
+
+    openClientModal(c = null) {
+      if (c) { this.editingClient = c; this.clientForm = JSON.parse(JSON.stringify(c)); }
+      else { this.editingClient = null; this.clientForm = { name: '', email: '', phone: '', customFields: [], purchasedProjects: [] }; }
+      this.showClientModal = true;
+    },
+    addCustomField() { this.clientForm.customFields.push({ key: '', value: '' }); },
+    removeCustomField(i) { this.clientForm.customFields.splice(i, 1); },
+    isProjectPurchased(id) { return this.clientForm.purchasedProjects.some(p => p.projectId === id); },
+    toggleProjectPurchase(id) {
+      const idx = this.clientForm.purchasedProjects.findIndex(p => p.projectId === id);
+      if (idx >= 0) this.clientForm.purchasedProjects.splice(idx, 1);
+      else this.clientForm.purchasedProjects.push({ projectId: id, maintenanceRequired: false });
+    },
+    isMaintenanceRequired(id) { const p = this.clientForm.purchasedProjects.find(p => p.projectId === id); return p ? p.maintenanceRequired : false; },
+    toggleMaintenance(id) { const p = this.clientForm.purchasedProjects.find(p => p.projectId === id); if (p) p.maintenanceRequired = !p.maintenanceRequired; },
+    saveClient() {
+      if (this.editingClient) {
+        const idx = this.clients.findIndex(c => c.id === this.editingClient.id);
+        if (idx !== -1) this.clients[idx] = JSON.parse(JSON.stringify(this.clientForm));
+      } else {
+        const newC = JSON.parse(JSON.stringify(this.clientForm));
+        newC.id = 'c_' + Date.now();
+        this.clients.push(newC);
+      }
+      this.showClientModal = false;
+      if (this.currentTab === 'home') this.$nextTick(() => this.renderCharts());
+    },
+    deleteClient(id) {
+      if (confirm('Remover cliente?')) this.clients = this.clients.filter(c => c.id !== id);
+      if (this.currentTab === 'home') this.$nextTick(() => this.renderCharts());
+    },
+
+    openProjectModal(p = null) {
+      if (p) { this.editingProject = p; this.projectForm = { ...p }; }
+      else { this.editingProject = null; this.projectForm = { name: '', description: '', stage: 'MVP', status: 'Em Andamento', budget: 45000 }; }
+      this.showProjectModal = true;
+    },
+    saveProject() {
+      if (this.editingProject) {
+        const index = this.projects.findIndex(p => p.id === this.editingProject.id);
+        if (index !== -1) {
+          this.projects[index] = { ...this.projects[index], ...this.projectForm };
+        }
+      } else {
+        this.projects.push({ id: 'p_' + Date.now(), ...this.projectForm, variables: [] });
+      }
+      this.showProjectModal = false;
+      if (this.currentTab === 'home') this.$nextTick(() => this.renderCharts());
+    },
+    deleteProject(id) {
+      if (confirm('Remover projeto?')) this.projects = this.projects.filter(p => p.id !== id);
+      if (this.currentTab === 'home') this.$nextTick(() => this.renderCharts());
+    },
+
+    openVariableModal(v = null) {
+      if (v) { this.editingVariable = v; this.variableForm = { ...v }; }
+      else { this.editingVariable = null; this.variableForm = { name: '', category: 'CLIENTE', type: 'TEXT', description: '' }; }
+      this.showVariableModal = true;
+    },
+    saveGlobalVariable() {
+      if (this.editingVariable) Object.assign(this.editingVariable, this.variableForm);
+      else this.globalVariables.push({ id: 'v_' + Date.now(), ...this.variableForm });
+      this.showVariableModal = false;
+    },
+    deleteGlobalVariable(id) {
+      if (confirm('Excluir variável?')) this.globalVariables = this.globalVariables.filter(v => v.id !== id);
+    },
+
+    openLinkVariableModal(proj) {
+      this.targetProject = proj;
+      if (this.availableVariablesForProject.length > 0) {
+        this.linkForm.variableId = this.availableVariablesForProject[0].id;
+        this.linkForm.currentValue = '';
+        this.showLinkModal = true;
+      } else alert('Todas as variáveis disponíveis já foram vinculadas.');
+    },
+    linkVariableToProject() {
+      if (this.targetProject && this.linkForm.variableId) {
+        this.targetProject.variables.push({ id: 'pv_' + Date.now(), variableId: this.linkForm.variableId, currentValue: this.linkForm.currentValue || '0' });
+        this.showLinkModal = false;
+      }
+    },
+    removeVariableFromProject(proj, pvId) { proj.variables = proj.variables.filter(pv => pv.id !== pvId); },
+    updateVariableValue(proj, pv) {
+      const gv = this.getGlobalVariable(pv.variableId);
+      const now = new Date();
+      this.logs.unshift({
+        id: 'l_' + Date.now(),
+        timestamp: now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 5),
+        projectName: proj.name,
+        variableName: gv ? gv.name : 'Variável',
+        newValue: pv.currentValue,
+        justification: 'Atualização direta no painel'
+      });
+      alert('Valor atualizado com sucesso!');
+    },
+    clearAuditLog() { if (confirm('Limpar histórico?')) this.logs = []; }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
